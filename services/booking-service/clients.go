@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/httpx"
+	"github.com/tirucloud/eventhub/internal/httpx"
 )
 
 // clients bundles the three downstream services booking-service depends on.

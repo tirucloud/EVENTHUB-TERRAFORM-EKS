@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/config"
+	"github.com/tirucloud/eventhub/internal/config"
 )
 
 // gateway stands in for a real payment processor.

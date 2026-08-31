@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/httpx"
-	"github.com/vijaygiduthuri/eventhub/internal/id"
+	"github.com/tirucloud/eventhub/internal/httpx"
+	"github.com/tirucloud/eventhub/internal/id"
 )
 
 type api struct {

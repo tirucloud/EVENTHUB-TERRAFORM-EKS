@@ -14,7 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/vijaygiduthuri/eventhub/internal/config"
+	"github.com/tirucloud/eventhub/internal/config"
 )
 
 // Connect dials PostgreSQL and retries until the pool is usable or ctx expires.

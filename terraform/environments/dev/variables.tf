@@ -357,7 +357,7 @@ variable "github_oidc_create_provider" {
 variable "github_owner" {
   description = "GitHub user or organisation owning the repository."
   type        = string
-  default     = "vijaygiduthuri"
+  default     = "tirucloud"
 }
 
 variable "github_repository" {

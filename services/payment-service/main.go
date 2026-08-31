@@ -9,10 +9,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/config"
-	"github.com/vijaygiduthuri/eventhub/internal/db"
-	"github.com/vijaygiduthuri/eventhub/internal/httpx"
-	"github.com/vijaygiduthuri/eventhub/internal/logging"
+	"github.com/tirucloud/eventhub/internal/config"
+	"github.com/tirucloud/eventhub/internal/db"
+	"github.com/tirucloud/eventhub/internal/httpx"
+	"github.com/tirucloud/eventhub/internal/logging"
 )
 
 const serviceName = "payment-service"

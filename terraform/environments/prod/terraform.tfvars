@@ -137,5 +137,5 @@ traefik_replicas = 3
 
 enable_github_oidc          = false
 github_oidc_create_provider = false
-github_owner                = "vijaygiduthuri"
+github_owner                = "tirucloud"
 github_repository           = "EventHub-Terraform-EKS"

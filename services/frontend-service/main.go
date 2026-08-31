@@ -13,9 +13,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/vijaygiduthuri/eventhub/internal/config"
-	"github.com/vijaygiduthuri/eventhub/internal/httpx"
-	"github.com/vijaygiduthuri/eventhub/internal/logging"
+	"github.com/tirucloud/eventhub/internal/config"
+	"github.com/tirucloud/eventhub/internal/httpx"
+	"github.com/tirucloud/eventhub/internal/logging"
 )
 
 const serviceName = "frontend-service"

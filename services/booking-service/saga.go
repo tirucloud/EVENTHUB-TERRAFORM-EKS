@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/httpx"
-	"github.com/vijaygiduthuri/eventhub/internal/id"
+	"github.com/tirucloud/eventhub/internal/httpx"
+	"github.com/tirucloud/eventhub/internal/id"
 )
 
 // bookingError carries an HTTP status through the saga so the handler can

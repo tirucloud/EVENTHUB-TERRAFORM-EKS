@@ -1,4 +1,4 @@
-module github.com/vijaygiduthuri/eventhub
+module github.com/tirucloud/eventhub
 
 go 1.26.0
 

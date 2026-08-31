@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/vijaygiduthuri/eventhub/internal/httpx"
+	"github.com/tirucloud/eventhub/internal/httpx"
 )
 
 type api struct {

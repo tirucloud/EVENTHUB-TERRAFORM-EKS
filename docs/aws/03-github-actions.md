@@ -346,7 +346,7 @@ The Terraform module is already written and switched off:
 # terraform/environments/dev/terraform.tfvars
 enable_github_oidc          = true
 github_oidc_create_provider = true     # only ONE environment may create it
-github_owner                = "vijaygiduthuri"
+github_owner                = "tirucloud"
 github_repository           = "EventHub-Terraform-EKS"
 ```
 

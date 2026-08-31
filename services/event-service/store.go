@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/id"
+	"github.com/tirucloud/eventhub/internal/id"
 )
 
 var (

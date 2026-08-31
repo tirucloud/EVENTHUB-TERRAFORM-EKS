@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/id"
+	"github.com/tirucloud/eventhub/internal/id"
 )
 
 func testEvent(seats int) Event {

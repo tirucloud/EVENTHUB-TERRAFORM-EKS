@@ -104,5 +104,5 @@ traefik_chart_version                      = "41.2.0"
 
 enable_github_oidc          = false
 github_oidc_create_provider = false
-github_owner                = "vijaygiduthuri"
+github_owner                = "tirucloud"
 github_repository           = "EventHub-Terraform-EKS"

@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/vijaygiduthuri/eventhub/internal/config"
+	"github.com/tirucloud/eventhub/internal/config"
 )
 
 // New returns a JSON logger tagged with the service name. The level comes from

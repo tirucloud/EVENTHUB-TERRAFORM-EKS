@@ -390,9 +390,9 @@ make smoke-cluster
 > flush, because it never reaches DNS at all:
 >
 > ```bash
-> grep vijaygiduthuri /etc/hosts          # if this prints anything, that is your problem
+> grep tirucloud /etc/hosts          # if this prints anything, that is your problem
 > resolvectl query thirucloud.shop      # "Data from: synthetic" confirms /etc/hosts
-> sudo sed -i '/vijaygiduthuri\.in/d' /etc/hosts
+> sudo sed -i '/tirucloud\.in/d' /etc/hosts
 > ```
 >
 > To test regardless, pin the address — this also works before DNS has
@@ -470,7 +470,7 @@ by the time you build them, dev has proved the path works.
 | `https://` → `404` | Ingress host does not match the URL | `kubectl get ingress -n eventhub` and compare with `terraform output app_fqdn`. |
 | `https://` → Traefik default self-signed cert | Secret `eventhub-tls` missing or empty | `kubectl get secret eventhub-tls -n eventhub`; if absent, the Certificate has not issued — go back to Step 6. |
 | Redirect goes to `https://host:8443/` and hangs | Traefik's container port leaked into the public redirect | The module sets `redirections.entryPoint.to=:443`. If you overrode `additional_arguments`, keep the explicit port. |
-| Smoke test fails but manual `curl` works | A stale `/etc/hosts` entry, or a resolver answering incorrectly | `grep vijaygiduthuri /etc/hosts`; or pin with `RESOLVE_IP=…`. See Step 9. |
+| Smoke test fails but manual `curl` works | A stale `/etc/hosts` entry, or a resolver answering incorrectly | `grep tirucloud /etc/hosts`; or pin with `RESOLVE_IP=…`. See Step 9. |
 | Ingress still answers on the old hostname after changing `subdomain` | Only `module.traefik` was re-applied | The Ingress hosts come from `module.k8s_app`. Apply both: `terraform apply -target=module.traefik -target=module.k8s_app`. |
 | `http://` no longer redirects | `traefik_redirect_http_to_https` still false | Set it true and `terraform apply -target=module.traefik`. |
 | Certificate did not renew | cert-manager not running, or IRSA revoked | `kubectl get pods -n cert-manager`; `kubectl describe certificate eventhub-tls -n eventhub`. |

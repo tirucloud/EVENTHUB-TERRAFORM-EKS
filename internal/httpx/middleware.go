@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/id"
+	"github.com/tirucloud/eventhub/internal/id"
 )
 
 type ctxKey int

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/config"
+	"github.com/tirucloud/eventhub/internal/config"
 )
 
 // draining flips to true the moment SIGTERM arrives, which makes the readiness

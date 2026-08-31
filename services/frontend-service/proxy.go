@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/vijaygiduthuri/eventhub/internal/httpx"
+	"github.com/tirucloud/eventhub/internal/httpx"
 )
 
 // backend describes one upstream service and the path prefix it owns.
