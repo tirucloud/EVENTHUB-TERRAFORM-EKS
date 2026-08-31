@@ -114,7 +114,7 @@ State lives in **S3 with native lockfile locking** (`use_lockfile = true`,
 Terraform ≥ 1.11) — **no DynamoDB table needed**.
 
 > ⚠️ **`backend.tf` already names a bucket:**
-> `eventhub-tfstate-118178010323`, which belongs to the account this was first
+> `eventhub-tfstate-015906850208`, which belongs to the account this was first
 > built in. **If you are deploying into a different AWS account**, create your
 > own bucket below and change the `bucket =` line in all three
 > `terraform/environments/*/backend.tf` files. The bucket name is global across

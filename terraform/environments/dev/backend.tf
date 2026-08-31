@@ -25,7 +25,7 @@
 
 terraform {
   backend "s3" {
-    bucket       = "eventhub-tfstate-118178010323"
+    bucket       = "eventhub-tfstate-015906850208"
     key          = "dev/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
