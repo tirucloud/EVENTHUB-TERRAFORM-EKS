@@ -1,0 +1,14 @@
+# Keep the build context to the Go module only. Everything below is either
+# irrelevant to the binary or would bust the layer cache on every commit.
+.git
+.github
+.gitignore
+terraform
+docs
+scripts
+*.md
+**/*.md
+Makefile
+docker-compose.yml
+.env
+.env.*

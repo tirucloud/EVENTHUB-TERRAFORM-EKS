@@ -1,0 +1,9 @@
+apiVersion: v2
+name: cert-manager-issuers
+description: >-
+  Let's Encrypt ClusterIssuers for EventHub, solving ACME DNS-01 challenges
+  through Route53. Packaged as a chart purely so Terraform can create custom
+  resources whose CRDs are installed in the same apply.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

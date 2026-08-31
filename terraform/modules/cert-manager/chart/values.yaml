@@ -1,0 +1,17 @@
+# Every value here is supplied by terraform/02-apps/platform.tf. The defaults
+# exist so `helm template` works standalone when debugging.
+
+# Contact address registered with the ACME account. Let's Encrypt sends expiry
+# warnings here.
+email: ""
+
+# The hosted zone this issuer is allowed to write challenge records into. Acts
+# as a selector, so an issuer scoped to one zone will not try to solve a
+# challenge for an unrelated domain.
+dnsZone: ""
+
+aws:
+  region: ""
+  # Pinning the zone ID stops cert-manager from having to search every hosted
+  # zone in the account, which also lets the IAM policy stay scoped to one zone.
+  hostedZoneID: ""

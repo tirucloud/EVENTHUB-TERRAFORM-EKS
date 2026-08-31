@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EventHub</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎟️</text></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">🎟️</span>
+      <div>
+        <h1>EventHub</h1>
+        <p>Event management &amp; ticket booking</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-view="events" role="tab">Events</button>
+      <button class="tab" data-view="bookings" role="tab">Bookings</button>
+      <button class="tab" data-view="notifications" role="tab">Notifications</button>
+    </nav>
+  </header>
+
+  <main>
+    <div id="banner" class="banner" hidden></div>
+
+    <section id="view-events" class="view">
+      <div class="view-head">
+        <h2>Upcoming events</h2>
+        <input id="search" type="search" placeholder="Search events, venues…" autocomplete="off">
+      </div>
+      <div id="events-grid" class="grid"></div>
+    </section>
+
+    <section id="view-bookings" class="view" hidden>
+      <div class="view-head">
+        <h2>Bookings</h2>
+        <button class="btn btn-ghost" data-refresh="bookings">Refresh</button>
+      </div>
+      <div id="bookings-list" class="stack"></div>
+    </section>
+
+    <section id="view-notifications" class="view" hidden>
+      <div class="view-head">
+        <h2>Notification feed</h2>
+        <button class="btn btn-ghost" data-refresh="notifications">Refresh</button>
+      </div>
+      <div id="notifications-list" class="stack"></div>
+    </section>
+  </main>
+
+  <dialog id="booking-dialog">
+    <form id="booking-form" method="dialog">
+      <h3 id="dialog-title">Book tickets</h3>
+      <p id="dialog-subtitle" class="muted"></p>
+
+      <label>Your name
+        <input name="customer_name" required autocomplete="name" value="Vijay Giduthuri">
+      </label>
+
+      <label>Email
+        <input name="customer_email" type="email" required autocomplete="email" value="vijay@example.com">
+      </label>
+
+      <label>Seats
+        <input name="seats" type="number" min="1" max="10" value="2" required>
+      </label>
+
+      <label>Payment method
+        <select name="payment_method">
+          <option value="card">Card</option>
+          <option value="upi">UPI</option>
+          <option value="netbanking">Net banking</option>
+          <option value="declined-card">Card that always declines (demo)</option>
+        </select>
+      </label>
+
+      <p class="hint">
+        Pick the declining card to watch the booking saga roll the seat
+        reservation back across services.
+      </p>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="confirm-btn">Confirm booking</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer class="footer">
+    <span id="pod-info">connecting…</span>
+    <span class="footer-sep">•</span>
+    <span>EventHub on EKS, provisioned with Terraform</span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

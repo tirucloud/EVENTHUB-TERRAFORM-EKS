@@ -1,0 +1,133 @@
+# Local EventHub stack: the same five images that get pushed to ECR and run on
+# EKS, wired together with compose instead of Kubernetes Services.
+#
+#   docker compose up --build     start everything
+#   open http://localhost:8080    the UI
+#
+# The only difference between this file and the Kubernetes manifests in
+# terraform/modules/k8s-app is how the *_SERVICE_URL variables resolve. Nothing
+# in the application code changes.
+
+name: eventhub
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  environment: &common-env
+    LOG_LEVEL: info
+    APP_VERSION: local
+    # Compose has no endpoints controller to wait for, so drain instantly.
+    DRAIN_DELAY: 0s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eventhub
+      POSTGRES_PASSWORD: eventhub
+      POSTGRES_DB: eventhub
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventhub -d eventhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  event-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: services/event-service/Dockerfile
+    image: eventhub/event-service:local
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgres://eventhub:eventhub@postgres:5432/events?sslmode=disable
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  payment-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    image: eventhub/payment-service:local
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgres://eventhub:eventhub@postgres:5432/payments?sslmode=disable
+      # Raise FAILURE_RATE_PERCENT to demo random declines and compensation.
+      FAILURE_RATE_PERCENT: "0"
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  notification-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    image: eventhub/notification-service:local
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgres://eventhub:eventhub@postgres:5432/notifications?sslmode=disable
+    ports:
+      - "8084:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  booking-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: services/booking-service/Dockerfile
+    image: eventhub/booking-service:local
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgres://eventhub:eventhub@postgres:5432/bookings?sslmode=disable
+      EVENT_SERVICE_URL: http://event-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      event-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+
+  frontend-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: services/frontend-service/Dockerfile
+    image: eventhub/frontend-service:local
+    environment:
+      <<: *common-env
+      EVENT_SERVICE_URL: http://event-service:8080
+      BOOKING_SERVICE_URL: http://booking-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      - event-service
+      - booking-service
+      - payment-service
+      - notification-service
+
+volumes:
+  postgres-data:

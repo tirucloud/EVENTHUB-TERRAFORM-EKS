@@ -1,0 +1,348 @@
+name: build-scan-push
+
+# Builds all five EventHub images, scans each one with Trivy, and pushes the
+# scanned artefact to a single Amazon ECR repository.
+#
+# The image is built once and loaded into the local Docker daemon, scanned
+# there, and only then tagged and pushed. That ordering matters: the bytes that
+# pass the scan are exactly the bytes that reach ECR. Building a second time for
+# the push would mean shipping an image that was never scanned.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/build-scan-push.yml"
+  pull_request:
+    paths:
+      - "services/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: "Push images to ECR after scanning"
+        type: boolean
+        default: true
+      fail_on_vulnerabilities:
+        description: "Fail the build when CRITICAL/HIGH issues are found"
+        type: boolean
+        default: true
+
+# Configuration comes from repository variables rather than being hardcoded, so
+# pointing this pipeline at a different account, region or registry is a change
+# in the GitHub UI instead of a commit.
+#
+#   Settings -> Secrets and variables -> Actions -> Variables
+#     AWS_REGION      us-east-1
+#     ECR_REGISTRY    <account-id>.dkr.ecr.<region>.amazonaws.com
+#     ECR_REPOSITORY  eventhub
+#
+# Variables are visible in logs by design — they are not secrets. Only the two
+# AWS credentials live under Secrets.
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+  # Single repository for all five services. Images are told apart by tag
+  # prefix, e.g. eventhub:event-service-latest.
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  # Composed once here so every step refers to the same image path.
+  IMAGE_PREFIX: ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}
+  GO_VERSION: "1.26.5"
+
+# Two workflow runs on the same branch would race each other to the -latest tag.
+concurrency:
+  group: build-scan-push-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # Required to publish Trivy results to the repository's Security tab.
+  security-events: write
+  # codeql-action/upload-sarif calls GET /repos/{owner}/{repo}/actions/runs/{id}
+  # to attach results to the run. Without this it fails with
+  # "Resource not accessible by integration".
+  actions: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Fail fast on compilation and static analysis before spending time on five
+  # container builds.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Go vet, build and test
+    runs-on: ubuntu-latest
+    steps:
+      # Fails in seconds rather than after five container builds. An unset
+      # repository variable expands to an empty string, so without this the
+      # first symptom would be a push to "/eventhub:..." with a confusing
+      # authentication error.
+      - name: Check required repository variables are set
+        run: |
+          missing=0
+          for v in AWS_REGION ECR_REGISTRY ECR_REPOSITORY; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Repository variable ${v} is not set"
+              missing=1
+            else
+              echo "  ${v} = ${!v}"
+            fi
+          done
+          if [ "$missing" = "1" ]; then
+            echo "::error::Set them under Settings -> Secrets and variables -> Actions -> Variables"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then
+            echo "::error::These files are not gofmt-formatted:"
+            echo "${unformatted}"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+  # ---------------------------------------------------------------------------
+  # One job per service, all five in parallel.
+  # ---------------------------------------------------------------------------
+  build-scan-push:
+    name: ${{ matrix.service }}
+    needs: verify
+    runs-on: ubuntu-latest
+
+    strategy:
+      # One service failing its scan should not hide the results for the other
+      # four; the session is more useful when the whole picture is visible.
+      fail-fast: false
+      matrix:
+        service:
+          - frontend-service
+          - event-service
+          - booking-service
+          - payment-service
+          - notification-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          # Local tag used for scanning before the image ever leaves the runner.
+          echo "local=${{ matrix.service }}:ci-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${{ matrix.service }}-${GITHUB_SHA}"   >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${{ matrix.service }}-latest"       >> "$GITHUB_OUTPUT"
+
+      # Single-architecture on purpose. A multi-arch manifest cannot be loaded
+      # into the local daemon, which would force a push-before-scan. EKS nodes
+      # here are x86_64, so linux/amd64 is all we need.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.tags.outputs.local }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+      # Trivy pulls its vulnerability database from ghcr.io on every run and is
+      # subject to rate limits. Caching it keeps five parallel jobs from
+      # hammering the registry.
+      - name: Cache Trivy database
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.trivy-cache
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+
+      # Note the leading "v". aquasecurity/trivy-action retagged its releases
+      # with a v prefix, and the old bare tags (0.28.0 and similar) were removed
+      # rather than kept as aliases — so an unprefixed pin fails at job setup
+      # with "unable to find version", before a single line of the build runs.
+      - name: Scan image with Trivy (gate)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tags.outputs.local }}
+          format: table
+          severity: CRITICAL,HIGH
+          # Only fail on issues someone can actually act on. A CVE with no
+          # published fix cannot be resolved by rebuilding, so blocking on it
+          # just teaches people to disable the gate.
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: ${{ (github.event_name == 'workflow_dispatch' && inputs.fail_on_vulnerabilities == false) && '0' || '1' }}
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.trivy-cache
+
+      # Runs even when the gate above failed, so the Security tab always shows
+      # why. exit-code 0 keeps this step from masking the gate's verdict.
+      - name: Scan image with Trivy (SARIF report)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tags.outputs.local }}
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          exit-code: "0"
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.trivy-cache
+
+      # Always keep the report as a downloadable artifact. This works on every
+      # plan and every repository visibility, so the scan results are never
+      # lost even when the Security tab is unavailable.
+      - name: Upload SARIF as a build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.service }}
+          path: trivy-${{ matrix.service }}.sarif
+          retention-days: 30
+
+      # Publishing to the Security tab is best effort.
+      #
+      # Code scanning on a **private** repository requires GitHub Advanced
+      # Security. Without it this step fails with "Resource not accessible by
+      # integration" — which says nothing about the images and must not stop
+      # them shipping. The security decision was already made by the gate step
+      # above, which fails the job on its own when it finds something.
+      #
+      # On a public repository, or a private one with Advanced Security, this
+      # succeeds and the findings appear under Security -> Code scanning.
+      - name: Upload SARIF to the Security tab
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+      # -------------------------------------------------------------------
+      # Everything below only runs for trusted events. A pull request from a
+      # fork must never reach AWS credentials.
+      # -------------------------------------------------------------------
+      - name: Configure AWS credentials
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.push_images)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+        # Static keys are used here because that is what this project asked for.
+        # The better long-term pattern is OIDC, which removes long-lived secrets
+        # entirely — see the commented block at the bottom of this file.
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.push_images)
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and push to ECR
+        id: push
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.push_images)
+        run: |
+          set -euo pipefail
+
+          # IMAGE_PREFIX comes from the ECR_REGISTRY and ECR_REPOSITORY
+          # repository variables. The amazon-ecr-login step above still handles
+          # authentication; this only decides what the image is called.
+          #
+          # Guard against a typo in the variable pointing the push at a registry
+          # in a different account, which would fail with an opaque auth error.
+          if [ "${ECR_REGISTRY}" != "${{ steps.ecr.outputs.registry }}" ]; then
+            echo "::error::ECR_REGISTRY variable is '${ECR_REGISTRY}' but these"
+            echo "::error::credentials authenticate to '${{ steps.ecr.outputs.registry }}'."
+            echo "::error::Fix the ECR_REGISTRY repository variable."
+            exit 1
+          fi
+
+          sha_uri="${IMAGE_PREFIX}:${{ steps.tags.outputs.sha_tag }}"
+          latest_uri="${IMAGE_PREFIX}:${{ steps.tags.outputs.latest_tag }}"
+
+          # Both tags point at the one image that was just scanned.
+          docker tag "${{ steps.tags.outputs.local }}" "${sha_uri}"
+          docker tag "${{ steps.tags.outputs.local }}" "${latest_uri}"
+
+          docker push "${sha_uri}"
+          docker push "${latest_uri}"
+
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${sha_uri}" | cut -d@ -f2)"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "sha_uri=${sha_uri}" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.service }}"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| commit | \`${GITHUB_SHA}\` |"
+            echo "| scan | Trivy CRITICAL/HIGH, unfixed ignored |"
+            if [ -n "${{ steps.push.outputs.sha_uri }}" ]; then
+              echo "| image | \`${{ steps.push.outputs.sha_uri }}\` |"
+              echo "| digest | \`${{ steps.push.outputs.digest }}\` |"
+              echo "| tags | \`${{ steps.tags.outputs.sha_tag }}\`, \`${{ steps.tags.outputs.latest_tag }}\` |"
+            else
+              echo "| image | not pushed (pull request or push disabled) |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# ------------------------------------------------------------------------------
+# Preferred alternative to the static keys above: GitHub OIDC.
+#
+# It removes AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the repository
+# entirely — GitHub mints a short-lived token per run and AWS trades it for
+# temporary credentials. Nothing long-lived exists to leak or rotate.
+#
+# To switch:
+#   1. Create the OIDC provider and role: set enable_github_oidc = true in one
+#      environment's terraform.tfvars and apply -target=module.github_oidc.
+#   2. Add `id-token: write` to the permissions block at the top of this file.
+#   3. Replace the "Configure AWS credentials" step with:
+#
+#        - name: Configure AWS credentials
+#          uses: aws-actions/configure-aws-credentials@v4
+#          with:
+#            role-to-assume: arn:aws:iam::<account-id>:role/eventhub-github-actions
+#            aws-region: ${{ env.AWS_REGION }}
+#
+#   4. Delete both secrets from the repository settings.
+# ------------------------------------------------------------------------------

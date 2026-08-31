@@ -1,0 +1,76 @@
+name: terraform-validate
+
+# Formatting and validation for every environment and module.
+#
+# No AWS credentials are used: `terraform init -backend=false` skips the backend
+# entirely, so this runs safely on pull requests from forks. It catches the
+# errors that waste the most time in a live session — a missing variable, a typo
+# in a resource argument, an unformatted file.
+
+on:
+  push:
+    branches: [main]
+    paths: ["terraform/**", ".github/workflows/terraform-validate.yml"]
+  pull_request:
+    paths: ["terraform/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: "1.14.8"
+
+jobs:
+  fmt:
+    name: terraform fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff terraform/
+
+  validate:
+    name: validate ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every environment shares the same modules, so validating all three
+        # catches a variable that exists in one tfvars file and not the others.
+        environment: [dev, stage, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init
+        run: terraform -chdir=terraform/environments/${{ matrix.environment }} init -backend=false -input=false
+
+      - name: terraform validate
+        run: terraform -chdir=terraform/environments/${{ matrix.environment }} validate -no-color
+
+  lint-charts:
+    name: helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Render the ClusterIssuer chart
+        run: |
+          helm template cert-manager-issuers terraform/modules/cert-manager/chart \
+            --set email=ci@example.com \
+            --set dnsZone=example.com \
+            --set aws.region=us-east-1 \
+            --set aws.hostedZoneID=Z0123456789ABCDEFGHIJ

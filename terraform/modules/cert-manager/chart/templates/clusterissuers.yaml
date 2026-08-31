@@ -1,0 +1,47 @@
+{{- /*
+Two issuers, deliberately.
+
+Let's Encrypt production allows 5 duplicate certificates per registered domain
+per week. Debugging a DNS-01 setup burns through that in an afternoon, and then
+you are locked out until the window rolls forward — usually right before the
+session you were preparing for.
+
+So: prove the pipeline works against staging, whose limits are effectively
+unlimited, then flip use_letsencrypt_staging to false. A staging certificate is
+signed by an untrusted root, so the browser complains, but issuance exercises
+exactly the same code path.
+*/ -}}
+
+{{- $solver := dict "dns01" (dict "route53" (dict "region" .Values.aws.region "hostedZoneID" .Values.aws.hostedZoneID)) "selector" (dict "dnsZones" (list .Values.dnsZone)) -}}
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app.kubernetes.io/part-of: eventhub
+    app.kubernetes.io/managed-by: terraform
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: {{ required "email is required" .Values.email | quote }}
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - {{ toYaml $solver | nindent 8 | trim }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app.kubernetes.io/part-of: eventhub
+    app.kubernetes.io/managed-by: terraform
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: {{ required "email is required" .Values.email | quote }}
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - {{ toYaml $solver | nindent 8 | trim }}
